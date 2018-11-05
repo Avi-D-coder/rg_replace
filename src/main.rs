@@ -34,15 +34,40 @@ since ripgrep is RECURSIVE use: `yes | rgr <arguments>` AT YOUR OWN RISK"))
     };
 }
 
-fn filter_args_json(args: Vec<String>, options: Vec<(&str, bool)>) -> Vec<String> {
-    let mut args = remove_options(args, options);
-    args.push("--json".to_owned());
+fn handle_args(args: Vec<String>, remove_args: Vec<(&str, bool)>) -> Vec<String> {
+    let mut args = remove_options(args, remove_args);
+
+    let mut is_present = args.iter().fold(
+        [
+            ("--json", false),
+            ("--line_number", false),
+            ("--context", false),
+        ],
+        |[(json_text, json_present),
+        (line_number_text,line_number_present),
+        (context_text,context_present)],
+        arg| {
+            [
+                (json_text, json_present || arg == json_text),
+                (line_number_text, line_number_present || arg == line_number_text),
+                (context_text, context_present || arg == context_text),
+            ]
+        },
+    );
+
+    is_present[2].0 = "--context=3";
+
+    for (arg, needed) in is_present.iter() {
+        if *needed {
+            args.push(arg.to_string())
+        }
+    }
     args
 }
 
 fn generate_diff_interactively() {
     let rgr_args: Vec<String> = env::args().skip(1).collect();
-    let pass_args = filter_args_json(
+    let pass_args = handle_args(
         rgr_args,
         vec![
             ("--replace", true),
@@ -51,11 +76,17 @@ fn generate_diff_interactively() {
             ("--iterative", false),
         ],
     );
+}
 
+fn rg_call_output(args: Vec<String>) {
     let out = Command::new("rg")
-        .args(pass_args)
+        .args(args)
         .output()
         .expect("rg not found. Install ripgrep");
+
+    let out = unsafe { String::from_utf8_unchecked(out.stdout) };
+
+    out.lines();
 }
 
 fn remove_options(args: Vec<String>, options: Vec<(&str, bool)>) -> Vec<String> {
