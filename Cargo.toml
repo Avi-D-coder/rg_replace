@@ -7,3 +7,4 @@ authors = ["host"]
 [dependencies]
 clap = "2.32.0"
 serde_json = "1.0.32"
+grep_json_deserialize = "0.1.2"

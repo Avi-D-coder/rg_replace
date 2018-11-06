@@ -1,8 +1,12 @@
+use std::ops::Range;
 use std::process::Command;
 
 extern crate clap;
 use clap::{App, Arg};
 use std::env;
+
+extern crate grep_json_deserialize as deserialize;
+use deserialize::{ArbitraryData::*, Type::*, *};
 
 fn main() {
     let matches = App::new("rg_replace")
@@ -78,6 +82,28 @@ fn generate_diff_interactively() {
     );
 }
 
+#[derive(Debug)]
+enum Line {
+    Matched {
+        line_number: usize,
+        absolute_offset: isize,
+        lines: ArbitraryData,
+        sub_matches: Vec<Range<usize>>,
+    },
+    // TODO spec says context can have submatch
+    Context {
+        line_number: usize,
+        text: String,
+    },
+}
+
+#[derive(Debug)]
+struct FileGroup {
+    path: ArbitraryData,
+    // matches: Vec<Match>,
+    lines: Vec<Line>,
+}
+
 fn rg_call_output(args: Vec<String>) {
     let out = Command::new("rg")
         .args(args)
@@ -86,7 +112,44 @@ fn rg_call_output(args: Vec<String>) {
 
     let out = unsafe { String::from_utf8_unchecked(out.stdout) };
 
-    out.lines();
+    let mut files = vec![];
+    let mut file_path = None;
+    let mut file_lines = vec![];
+    for line in out.lines() {
+        let line: Type = serde_json::from_str(&line).unwrap();
+        match line {
+            Begin { path } => file_path = Some(path),
+            Match {
+                lines,
+                line_number,
+                absolute_offset,
+                submatches,
+                ..
+            } => file_lines.push(Line::Matched {
+                // We always pass `--line-number`.
+                line_number: line_number.unwrap(),
+                absolute_offset,
+                lines,
+                sub_matches: submatches.into_iter().map(|m| m.start..m.end).collect(),
+            }),
+            Context {
+                line_number, lines, ..
+            } => file_lines.push(Line::Context {
+                line_number: line_number.unwrap(),
+                text: lines.lossy_utf8(),
+            }),
+            End { .. } => {
+                files.push(FileGroup {
+                    // a Begin will always set file_path before we unwrap it.
+                    path: file_path.unwrap(),
+                    lines: file_lines,
+                });
+                file_path = None;
+                file_lines = vec![];
+            }
+            Summary { .. } => {}
+        };
+    }
 }
 
 fn remove_options(args: Vec<String>, options: Vec<(&str, bool)>) -> Vec<String> {
