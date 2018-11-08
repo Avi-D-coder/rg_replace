@@ -1,3 +1,4 @@
+use std::io::{self, Write};
 use std::ops::Range;
 use std::process::Command;
 
@@ -80,6 +81,28 @@ fn generate_diff_interactively() {
             ("--iterative", false),
         ],
     );
+
+    let files = rg_call_output(pass_args);
+
+    files.into_iter().map(|file| {
+        println!("{}", file.path.lossy_utf8());
+        let stdout = io::stdout();
+
+        // make indent for line numbers
+        let indent_count = file
+            .lines
+            .iter()
+            .map(|l| l.line_number().to_string())
+            .map(|s| s.len())
+            .max()
+            .unwrap();
+        let mut indent = String::with_capacity(indent_count);
+        for _ in 0..=indent_count {
+            indent.push(' ');
+        };
+        
+        let mut stdout = stdout.lock();
+    });
 }
 
 #[derive(Debug)]
@@ -97,6 +120,15 @@ enum Line {
     },
 }
 
+impl Line {
+    fn line_number(&self) -> usize {
+        match self {
+            Line::Matched { line_number, .. } => *line_number,
+            Line::Context { line_number, .. } => *line_number,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct FileGroup {
     path: ArbitraryData,
@@ -104,7 +136,7 @@ struct FileGroup {
     lines: Vec<Line>,
 }
 
-fn rg_call_output(args: Vec<String>) {
+fn rg_call_output(args: Vec<String>) -> Vec<FileGroup> {
     let out = Command::new("rg")
         .args(args)
         .output()
@@ -150,6 +182,7 @@ fn rg_call_output(args: Vec<String>) {
             Summary { .. } => {}
         };
     }
+    files
 }
 
 fn remove_options(args: Vec<String>, options: Vec<(&str, bool)>) -> Vec<String> {
