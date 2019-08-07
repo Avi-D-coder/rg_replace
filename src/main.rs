@@ -89,19 +89,16 @@ fn generate_diff_interactively() {
         let stdout = io::stdout();
 
         // make indent for line numbers
-        let indent_count = file
-            .lines
-            .iter()
-            .map(|l| l.line_number().to_string())
-            .map(|s| s.len())
-            .max()
-            .unwrap();
-        let mut indent = String::with_capacity(indent_count);
-        for _ in 0..=indent_count {
-            indent.push(' ');
-        };
-        
+        let line_numbers = file.lines.iter().map(|l| l.line_number().to_string());
+        let indent = line_numbers.map(|s| s.len()).max().unwrap();
+
         let mut stdout = stdout.lock();
+
+        for line in file.lines.iter() {
+            for i in 0..indent {
+                line.line_number().to_string().chars().nth(i);
+            }
+        }
     });
 }
 
